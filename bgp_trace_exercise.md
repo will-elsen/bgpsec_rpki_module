@@ -4,12 +4,19 @@
 AS15169) and reconstruct the AS-level route — first as *packets actually flow*
 (traceroute), then as *BGP really sees it* (looking glasses).
 
-> **Key idea up front:** you don't run BGP — your ISP does. So you can't read the true
+> **Key idea:** you don't run BGP — your ISP does. So you can't read the true
 > BGP AS-path directly from your machine. You approximate it two ways: (1) traceroute +
-> AS mapping shows the **forwarding path**, and (2) public looking glasses / route
-> collectors show the **real BGP AS_PATH** from routers that actually speak BGP.
+> AS mapping shows the **forwarding path**, and (2) public looking glasses provided by
+> some ISPs show the **real BGP AS_PATH** from routers that actually speak BGP.
 > The two can differ (BGP routes by policy, not hop count; reverse paths are often
 > asymmetric). Combining them gets you very close to the truth.
+
+---
+
+### Tips
+
+If possible, complete this exercies in Linux or using WSL (Windows Subsystem for Linux).
+Commands used in this exercise differ between Linux and Windows Powershell, so WSL is preferable.
 
 ---
 
@@ -18,49 +25,42 @@ AS15169) and reconstruct the AS-level route — first as *packets actually flow*
 In a terminal window, run:
 
 ```bash
-curl -s https://ipinfo.io/json
+curl -s https://ipinfo.io/
 ```
 
-This returns your public IP and the network that owns it. If you see HTML instead of
-JSON, use the explicit `/json` endpoint above (or add `-H "Accept: application/json"`).
-
-On **Windows PowerShell**, the built-in `curl` is an alias for `Invoke-WebRequest`, so
-call real curl explicitly:
+This returns your public IP and the network that owns it. 
 
 ```powershell
 curl.exe -s https://ipinfo.io/json | ConvertFrom-Json
 ```
 
-Look at the `"org"` field — it looks like `AS7922 Comcast Cable Communications`. That
-**ASN is where your route begins** in BGP terms (your ISP's AS, not you personally).
+Look at the `"ip"` field to see your public IP address, and in the `"org"` field to 
+see your ASN — it looks like `AS7922 Comcast Cable Communications`. That **ASN is where
+your route begins** in BGP terms (your ISP's AS, not you personally).
 
 Record it:
 
 ```
 My public IP:   ____________________
-My ISP ASN:     AS__________  (name: ______________________)
-```
-
-Grab just the org line if you like:
-
-```bash
-curl -s https://ipinfo.io/org      # -> "AS#### <ISP name>"
+My ISP ASN:     AS__________  (provider name: ______________________)
 ```
 
 ---
 
 ### Step 2 — Identify the destination ASN
 
-Google's public DNS (`8.8.8.8`) is a convenient, well-connected target.
+In this exercise, we will trace the AS path from your ASN to Google's public DNS server:
 
 - **Destination IP:** `8.8.8.8`
-- **Destination ASN:** `AS15169` (Google LLC)
 
-You can confirm any IP's ASN at [bgp.he.net](https://bgp.he.net) (search the IP) or:
+Find the ASN of the Google DNS server by searching the public IP at `bgp.he.net` or running:
 
 ```bash
-curl -s https://ipinfo.io/8.8.8.8/json
+curl -s https://ipinfo.io/8.8.8.8/
 ```
+
+You'll notice this is the same command we used to find our own IP and ASN, but this time specifying
+the Google DNS server's IP address.
 
 ---
 
@@ -82,14 +82,9 @@ traceroute 8.8.8.8        # Linux / macOS
 tracert 8.8.8.8           # Windows (no ASN column)
 ```
 
-On **Windows**, `tracert` gives hops but no ASN. Options:
-- Run `mtr -z` inside **WSL**, or
-- Paste your traceroute output into a web AS-path mapper, or
-- Skip to Step 4 and read the BGP path directly from a looking glass.
-
 **What to expect / caveats:**
 - Google (AS15169) peers extremely widely, so you'll often reach it in just **2–4 ASes**.
-- `* * *` gaps are normal — many core routers don't respond to TTL-expired probes.
+- `* * *` gaps are normal — many core routers don't respond to the TTL-expired probes that traceroute uses.
 - The forwarding path can differ from the BGP AS_PATH, and the return path may differ again.
 
 Record the AS hops you observe:
@@ -167,8 +162,3 @@ curl -s https://ipinfo.io/8.8.8.8/json
 
 # Real BGP AS_PATH: bgp.he.net / stat.ripe.net / lg.he.net (web)
 ```
-
-**Reserved-doc note:** `8.8.8.8`/`AS15169` are real and safe to query. If you write up
-hypothetical examples, prefer documentation ASNs (64496–64511, 65536–65551) and prefixes
-(`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`) so nothing collides with real
-assignments — same convention used in `bgp_refresher.md`.
